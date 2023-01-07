@@ -1,19 +1,20 @@
 /*
-0.1 ampère * 24 => 
-5 volts
-24 heures
-=> 5 * 0.1 * 24 = 12 watts
-
-Il faut donc un panneau de :
-3.6 watts
-
-Consommation journalière 3.6W x 1,2 (marge de sécurité) = 4.32W / 5V = 0.86 Ah x 3 jours = 2.59 Ah
-
-https://fiz-ix.com/2012/11/low-power-arduino-using-the-watchdog-timer/
-*/
-
+ * Sketch for testing sleep mode with wake up on WDT.
+ * Donal Morrissey - 2011.
+ *
+ */
 #include <avr/sleep.h>
+#include <avr/power.h>
+#include <avr/wdt.h>
 
+#define LED_PIN (13)
+
+volatile int f_wdt = 1;
+
+
+
+
+// Custom Vars
 #define LDR A1  // composante photorésistance sur la pin A1
 
 const int boutonToOpenPin = 2;
@@ -30,18 +31,93 @@ int forceOpen = 0;
 int forceClose = 0;
 int luminosityValue;
 
-const int dark = 50;
+const int dark = 20;
 const int hysterisis = 5;
 
 const long MAX_TIME_DOOR_MOVE = 60000;
-// MAx time for door to move
 
-//char state[16];
 
-// This will run only one time.
+/***************************************************
+ *  Name:        ISR(WDT_vect)
+ *
+ *  Returns:     Nothing.
+ *
+ *  Parameters:  None.
+ *
+ *  Description: Watchdog Interrupt Service. This
+ *               is executed when watchdog timed out.
+ *
+ ***************************************************/
+ISR(WDT_vect) {
+  if (f_wdt == 0) {
+    f_wdt = 1;
+  } else {
+    // Serial.println("WDT Overrun!!!");
+  }
+}
+
+
+/***************************************************
+ *  Name:        enterSleep
+ *
+ *  Returns:     Nothing.
+ *
+ *  Parameters:  None.
+ *
+ *  Description: Enters the arduino into sleep mode.
+ *
+ ***************************************************/
+void enterSleep(void) {
+  set_sleep_mode(SLEEP_MODE_PWR_SAVE); /* EDIT: could also use SLEEP_MODE_PWR_DOWN for lowest power consumption. */
+  sleep_enable();
+
+  /* Now enter sleep mode. */
+  sleep_mode();
+
+  /* The program will continue from here after the WDT timeout*/
+  sleep_disable(); /* First thing to do is disable sleep. */
+
+  /* Re-enable the peripherals. */
+  power_all_enable();
+}
+
+
+
+/***************************************************
+ *  Name:        setup
+ *
+ *  Returns:     Nothing.
+ *
+ *  Parameters:  None.
+ *
+ *  Description: Setup for the serial comms and the
+ *                Watch dog timeout. 
+ *
+ ***************************************************/
 void setup() {
   Serial.begin(9600);
+  Serial.println("Initialising...");
+  delay(100);  //Allow for serial print to complete.
 
+  pinMode(LED_PIN, OUTPUT);
+
+  /*** Setup the WDT ***/
+
+  /* Clear the reset flag. */
+  MCUSR &= ~(1 << WDRF);
+
+  /* In order to change WDE or the prescaler, we need to
+   * set WDCE (This will allow updates for 4 clock cycles).
+   */
+  WDTCSR |= (1 << WDCE) | (1 << WDE);
+
+  /* set new watchdog timeout prescaler value */
+  WDTCSR = 1 << WDP0 | 1 << WDP3; /* 8.0 seconds */
+
+  /* Enable the WD interrupt (note no reset). */
+  WDTCSR |= _BV(WDIE);
+
+  // Custom setup
   pinMode(LDR, INPUT);
   pinMode(limitSwitchOpen, INPUT_PULLUP);
   pinMode(limitSwitchClose, INPUT_PULLUP);
@@ -57,9 +133,38 @@ void setup() {
 
   attachInterrupt(digitalPinToInterrupt(boutonToOpenPin), forceOpenDoor, CHANGE);
   attachInterrupt(digitalPinToInterrupt(boutonToClosePin), forceCloseDoor, CHANGE);
+
+
+
+  Serial.println("Initialisation complete.");
+  delay(100);  //Allow for serial print to complete.
 }
 
+
+
+/***************************************************
+ *  Name:        enterSleep
+ *
+ *  Returns:     Nothing.
+ *
+ *  Parameters:  None.
+ *
+ *  Description: Main application loop.
+ *
+ ***************************************************/
 void loop() {
+  if (f_wdt == 1) {
+    myLoop();
+
+    /* Don't forget to clear the flag. */
+    f_wdt = 0;
+
+    /* Re-enter sleep mode. */
+    enterSleep();
+  }
+}
+
+void myLoop() {
   digitalWrite(LED_BUILTIN, HIGH);
 
   delay(1000);
@@ -67,8 +172,8 @@ void loop() {
   digitalWrite(LED_BUILTIN, LOW);
   luminosityValue = analogRead(LDR);
 
-  // Serial.print("luminosityValue: ");
-  // Serial.println(luminosityValue);
+  Serial.print("luminosityValue: ");
+  Serial.println(luminosityValue);
 
   // Serial.print("digitalRead(limitSwitchOpen): ");
   // Serial.println(digitalRead(limitSwitchOpen));
@@ -76,18 +181,16 @@ void loop() {
   // Serial.print(" digitalRead(limitSwitchClose): ");
   // Serial.println( digitalRead(limitSwitchClose));
 
- //closeChickenDoor();
- //openChickenDoor();
+  //closeChickenDoor();
+  //openChickenDoor();
 
   if (isLight(luminosityValue) || forceOpen) {
     // Serial.println("open ?");
     openChickenDoor();
-  } else  if (isDark(luminosityValue) || forceClose) {
+  } else if (isDark(luminosityValue) || forceClose) {
     // Serial.println("close ?");
     closeChickenDoor();
   }
-
-  delay(2000);
 }
 
 void forceOpenDoor() {
@@ -116,6 +219,11 @@ bool isClosedDoorButtonPushed() {
   return digitalRead(limitSwitchClose) == HIGH;
 }
 
+void stopChickenDoor() {
+  digitalWrite(motorPin1, LOW);
+  digitalWrite(motorPin2, LOW);
+}
+
 void moveChickenDoorToClose() {
   digitalWrite(motorPin1, LOW);
   digitalWrite(motorPin2, HIGH);
@@ -128,10 +236,10 @@ void moveChickenDoorToOpen() {
 
 void openChickenDoor() {
   if (doorState == 0 || forceOpen == 1) {
-    Serial.println("OPEN > doorstate = 1");
+    Serial.println("openChickenDoor");
     doorState = 1;
     forceOpen = 0;
-    
+
     moveChickenDoorToOpen();
 
     bool motorTurns = true;
@@ -144,47 +252,39 @@ void openChickenDoor() {
     while (motorTurns) {
 
       currentTime = millis();
-            
+
       // if time excedeed (5s ?) => motorTurns false
       if (abs(currentTime - timeStart) > MAX_TIME_DOOR_MOVE) {
         Serial.println("stop open by timer");
-          motorTurns = false;
-          //break;
-      } else {
-        Serial.println("continue open by timer");
+        motorTurns = false;
+        //break;
       }
-
 
       if (isOpenedDoorButtonOpened()) {
         Serial.println("stop open by switch");
-        Serial.println("OPEN > stopChickenDoor");
+        // Serial.println("OPEN > stopChickenDoor");
 
         // stopChickenDoor();
         motorTurns = false;
-      } else {
-        Serial.println("continue open by switch");
       }
 
       delay(250);
     }
 
     // Move a little door in opposite direction.
-     moveChickenDoorToClose();
-     delay(2000);
+    moveChickenDoorToClose();
+    delay(2000);
 
-     stopChickenDoor();
+    stopChickenDoor();
   }
 }
 
 void closeChickenDoor() {
-  // Serial.println("enter in close");
-  // Serial.println(doorState);
-
   if (doorState == 1 || forceClose == 1) {
-    Serial.println("CLOSE > doorstate = 0");
+    Serial.println("closeChickenDoor");
     doorState = 0;
     forceClose = 0;
-    
+
     moveChickenDoorToClose();
 
     bool motorTurns = true;
@@ -197,38 +297,13 @@ void closeChickenDoor() {
     while (motorTurns) {
 
       currentTime = millis();
-      // Serial.println("(currentTime - timeStart) = %d");
-
-
-      Serial.print("timeStart=");
-      Serial.print(timeStart);
-      Serial.print(", currentTime=");
-      Serial.println(currentTime);
-
-      // Serial.println("MAX_TIME_DOOR_MOVE");
-      // Serial.println("3000");
-
-      // Serial.println("currentTime - timeStart");
-      // Serial.println(currentTime - timeStart);
-
-      Serial.print("currentTime: ");
-      Serial.println(currentTime);
-
-      Serial.print("timeStart: ");
-      Serial.println(timeStart);
-
-      Serial.print("currentTime - timeStart: ");
-      Serial.println(currentTime - timeStart);
-
-      Serial.print("MAX_TIME_DOOR_MOVE: ");
-      Serial.println(MAX_TIME_DOOR_MOVE);
-
+      
       // if time excedeed (5s ?) => motorTurns false
       if (abs(currentTime - timeStart) > MAX_TIME_DOOR_MOVE) {
 
         Serial.println("STOP CLOSE by timeout");
-          motorTurns = false;
-          //break;
+        motorTurns = false;
+        //break;
       }
 
       if (isClosedDoorButtonPushed()) {
@@ -241,15 +316,9 @@ void closeChickenDoor() {
     }
 
     // Move a little door in opposite direction.
-     moveChickenDoorToOpen();
-     delay(2000);
+    moveChickenDoorToOpen();
+    delay(2000);
 
-     stopChickenDoor();
+    stopChickenDoor();
   }
-}
-
-void stopChickenDoor() {
-
-  digitalWrite(motorPin1, LOW);
-  digitalWrite(motorPin2, LOW);
 }
