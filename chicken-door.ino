@@ -3,22 +3,24 @@
  * Donal Morrissey - 2011.
  *
  */
-#include <avr/sleep.h>
-#include <avr/power.h>
-#include <avr/wdt.h>
+// #include <avr/sleep.h>
+// #include <avr/power.h>
+// #include <avr/wdt.h>
 
-#define LED_PIN (13)
+// #define LED_PIN (13)
 
-volatile int f_wdt = 1;
+// volatile int f_wdt = 1;
 
 
-
+#include <LowPower.h>
 
 // Custom Vars
 #define LDR A1  // composante photorésistance sur la pin A1
 
 const int boutonToOpenPin = 2;
 const int boutonToClosePin = 3;
+
+const int transistorPin = 4;
 
 const int motorPin1 = 6;
 const int motorPin2 = 9;
@@ -36,86 +38,12 @@ const int hysterisis = 5;
 
 const long MAX_TIME_DOOR_MOVE = 60000;
 
-
-/***************************************************
- *  Name:        ISR(WDT_vect)
- *
- *  Returns:     Nothing.
- *
- *  Parameters:  None.
- *
- *  Description: Watchdog Interrupt Service. This
- *               is executed when watchdog timed out.
- *
- ***************************************************/
-ISR(WDT_vect) {
-  if (f_wdt == 0) {
-    f_wdt = 1;
-  } else {
-    // Serial.println("WDT Overrun!!!");
-  }
-}
-
-
-/***************************************************
- *  Name:        enterSleep
- *
- *  Returns:     Nothing.
- *
- *  Parameters:  None.
- *
- *  Description: Enters the arduino into sleep mode.
- *
- ***************************************************/
-void enterSleep(void) {
-  set_sleep_mode(SLEEP_MODE_PWR_SAVE); /* EDIT: could also use SLEEP_MODE_PWR_DOWN for lowest power consumption. */
-  sleep_enable();
-
-  /* Now enter sleep mode. */
-  sleep_mode();
-
-  /* The program will continue from here after the WDT timeout*/
-  sleep_disable(); /* First thing to do is disable sleep. */
-
-  /* Re-enable the peripherals. */
-  power_all_enable();
-}
-
-
-
-/***************************************************
- *  Name:        setup
- *
- *  Returns:     Nothing.
- *
- *  Parameters:  None.
- *
- *  Description: Setup for the serial comms and the
- *                Watch dog timeout. 
- *
- ***************************************************/
 void setup() {
   Serial.begin(9600);
   Serial.println("Initialising...");
   delay(100);  //Allow for serial print to complete.
 
-  pinMode(LED_PIN, OUTPUT);
-
-  /*** Setup the WDT ***/
-
-  /* Clear the reset flag. */
-  MCUSR &= ~(1 << WDRF);
-
-  /* In order to change WDE or the prescaler, we need to
-   * set WDCE (This will allow updates for 4 clock cycles).
-   */
-  WDTCSR |= (1 << WDCE) | (1 << WDE);
-
-  /* set new watchdog timeout prescaler value */
-  WDTCSR = 1 << WDP0 | 1 << WDP3; /* 8.0 seconds */
-
-  /* Enable the WD interrupt (note no reset). */
-  WDTCSR |= _BV(WDIE);
+  // pinMode(LED_PIN, OUTPUT);
 
   // Custom setup
   pinMode(LDR, INPUT);
@@ -130,6 +58,7 @@ void setup() {
   pinMode(motorPin1, OUTPUT);
   pinMode(motorPin2, OUTPUT);
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(transistorPin, OUTPUT);
 
   attachInterrupt(digitalPinToInterrupt(boutonToOpenPin), forceOpenDoor, CHANGE);
   attachInterrupt(digitalPinToInterrupt(boutonToClosePin), forceCloseDoor, CHANGE);
@@ -140,40 +69,26 @@ void setup() {
   delay(100);  //Allow for serial print to complete.
 }
 
-
-
-/***************************************************
- *  Name:        enterSleep
- *
- *  Returns:     Nothing.
- *
- *  Parameters:  None.
- *
- *  Description: Main application loop.
- *
- ***************************************************/
+// void loop() {
 void loop() {
-  if (f_wdt == 1) {
-    myLoop();
+  // digitalWrite(LED_BUILTIN, HIGH);
 
-    /* Don't forget to clear the flag. */
-    f_wdt = 0;
+  
 
-    /* Re-enter sleep mode. */
-    enterSleep();
-  }
-}
+  // delay(1000);
 
-void myLoop() {
-  digitalWrite(LED_BUILTIN, HIGH);
-
-  delay(1000);
-
-  digitalWrite(LED_BUILTIN, LOW);
+  // digitalWrite(LED_BUILTIN, LOW);
   luminosityValue = analogRead(LDR);
+
+Serial.println("");
+Serial.println("");
+Serial.println("");
+Serial.println("");
 
   Serial.print("luminosityValue: ");
   Serial.println(luminosityValue);
+
+
 
   // Serial.print("digitalRead(limitSwitchOpen): ");
   // Serial.println(digitalRead(limitSwitchOpen));
@@ -190,6 +105,17 @@ void myLoop() {
   } else if (isDark(luminosityValue) || forceClose) {
     // Serial.println("close ?");
     closeChickenDoor();
+  }
+
+  lowPowerSleep(8);
+}
+
+void lowPowerSleep(long seconds)
+{
+  // int seconds = minutes * 60;
+  int sleeps = seconds / 8;
+  for (int i = 0 ; i < sleeps ; i++) {
+    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
   }
 }
 
@@ -220,16 +146,22 @@ bool isClosedDoorButtonPushed() {
 }
 
 void stopChickenDoor() {
+  digitalWrite(transistorPin,LOW);
+
   digitalWrite(motorPin1, LOW);
   digitalWrite(motorPin2, LOW);
 }
 
 void moveChickenDoorToClose() {
+  digitalWrite(transistorPin,HIGH);
+
   digitalWrite(motorPin1, LOW);
   digitalWrite(motorPin2, HIGH);
 }
 
 void moveChickenDoorToOpen() {
+  digitalWrite(transistorPin,HIGH);
+
   digitalWrite(motorPin1, HIGH);
   digitalWrite(motorPin2, LOW);
 }
@@ -313,7 +245,7 @@ void closeChickenDoor() {
       }
 
       delay(250);
-    }
+    } 
 
     // Move a little door in opposite direction.
     moveChickenDoorToOpen();
