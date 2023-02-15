@@ -1,15 +1,64 @@
-/*
- * Sketch for testing sleep mode with wake up on WDT.
- * Donal Morrissey - 2011.
- *
- */
-// #include <avr/sleep.h>
-// #include <avr/power.h>
-// #include <avr/wdt.h>
+// /* Photocell reading program */
+// // Constants
+// #define DELAY 500 // Delay between two measurements in ms
+// #define VIN 5 // V power voltage
+// #define R 10000 //ohm resistance value
 
-// #define LED_PIN (13)
+// // Parameters
+// const int sensorPin = A7; // Pin connected to sensor
 
-// volatile int f_wdt = 1;
+// //Variables
+// int sensorVal; // Analog value from the sensor
+// int lux; //Lux value
+
+// void setup(void) {
+//   Serial.begin(9600);
+// }
+
+// void loop(void) {
+//   sensorVal = analogRead(sensorPin);
+//   lux=sensorRawToPhys(sensorVal);
+//   Serial.print(F("Raw value from sensor= "));
+//   Serial.println(sensorVal); // the analog reading
+//   Serial.print(F("Physical value from sensor = "));
+//   Serial.print(lux); // the analog reading
+//   Serial.println(F(" lumen")); // the analog reading
+//   delay(DELAY);
+// }
+
+// int sensorRawToPhys(int raw){
+//   // Conversion rule
+//   float Vout = float(raw) * (VIN / float(1024));// Conversion analog to voltage
+//   float RLDR = (R * (VIN - Vout))/Vout; // Conversion voltage to resistance
+//   int phys=500/(RLDR/1000); // Conversion resitance to lumen
+//   return phys;
+// }
+
+// /*
+//  * Sketch for testing sleep mode with wake up on WDT.
+//  * Donal Morrissey - 2011.
+//  *
+//  */
+// // #include <avr/sleep.h>
+// // #include <avr/power.h>
+// // #include <avr/wdt.h>
+
+// // #define LED_PIN (13)
+
+// // volatile int f_wdt = 1;
+
+
+// /*
+// http://www.ohm-easy.com/blog/sources-alimentation/20140321-calculer-taille-dun-panneau-solaire-petite-installation/
+// 10 mA.h x 5 volts x 24 heures = 0.01 x 5 x 24  = 1.2W
+
+// Il faiut un panneau de :
+// 1.2 x 1.5 / 5 = 0.36 w
+
+// Batterie :
+// 1.2W x 1.2 = 1.44 / 5 volts = 0.29 x 3 jours = 0.90 Ah
+
+// */
 
 
 #include <LowPower.h>
@@ -17,10 +66,11 @@
 // Custom Vars
 #define LDR A1  // composante photorésistance sur la pin A1
 
-const int boutonToOpenPin = 2;
-const int boutonToClosePin = 3;
+// Not implemented
+// const int boutonToOpenPin = 2;
+// const int boutonToClosePin = 3;
 
-const int transistorPin = 4;
+const int activatePontHPin = 4;
 
 const int motorPin1 = 6;
 const int motorPin2 = 9;
@@ -31,7 +81,6 @@ const int limitSwitchOpen = 7;   // the number of the LED pin
 int doorState = 0;  // 0: closed, 1: opened
 int forceOpen = 0;
 int forceClose = 0;
-int luminosityValue;
 
 const int dark = 20;
 const int hysterisis = 5;
@@ -43,27 +92,29 @@ void setup() {
   Serial.println("Initialising...");
   delay(100);  //Allow for serial print to complete.
 
-  // pinMode(LED_PIN, OUTPUT);
-
   // Custom setup
   pinMode(LDR, INPUT);
+
+  // TO REMOVE
+  pinMode(A2, INPUT);
+
   pinMode(limitSwitchOpen, INPUT_PULLUP);
   pinMode(limitSwitchClose, INPUT_PULLUP);
-  pinMode(boutonToOpenPin, INPUT_PULLUP);
-  pinMode(boutonToClosePin, INPUT_PULLUP);
 
-  // pinMode(reedsSwitch, INPUT_PULLUP);
+  // Not implemented
+  // pinMode(boutonToOpenPin, INPUT_PULLUP);
+  // pinMode(boutonToClosePin, INPUT_PULLUP);
 
 
   pinMode(motorPin1, OUTPUT);
   pinMode(motorPin2, OUTPUT);
   pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(transistorPin, OUTPUT);
+  pinMode(activatePontHPin, OUTPUT);
+  //pinMode(transistorPhotoResistancePin, OUTPUT);
 
-  attachInterrupt(digitalPinToInterrupt(boutonToOpenPin), forceOpenDoor, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(boutonToClosePin), forceCloseDoor, CHANGE);
-
-
+  // Not implemented
+  // attachInterrupt(digitalPinToInterrupt(boutonToOpenPin), forceOpenDoor, CHANGE);
+  // attachInterrupt(digitalPinToInterrupt(boutonToClosePin), forceCloseDoor, CHANGE);
 
   Serial.println("Initialisation complete.");
   delay(100);  //Allow for serial print to complete.
@@ -71,43 +122,61 @@ void setup() {
 
 // void loop() {
 void loop() {
-  // digitalWrite(LED_BUILTIN, HIGH);
+  // int luminosityValue = readLuminosity();
+
+  // Serial.println("");
+
+  // TO REMOVE
+  // digitalWrite(activatePontHPin,LOW);
+
+// moveChickenDoorToClose();
+// moveChickenDoorToOpen();
+
+
+
+  // Serial.print("luminosityValue: ");
+  // Serial.println(luminosityValue);
+
+
+
+
+
+  // Serial.print("analogRead(LDR): ");
+  // Serial.println(analogRead(LDR));
+
+   Serial.print("analogRead(A2): ");
+  Serial.println(analogRead(A2));
+  delay(500);
+
+
+
+
+
+  // if (isLight(luminosityValue) || forceOpen || true) {
+  //   // Serial.println("open ?");
+  //   openChickenDoor();
+
+  //   // TO REMOVE
+  //   // closeChickenDoor();
+  // } else if (isDark(luminosityValue) || forceClose) {
+  //   // Serial.println("close ?");
+  //   closeChickenDoor();
+  // }
 
   
 
-  // delay(1000);
+  // lowPowerSleep(8);
+  // LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+}
 
-  // digitalWrite(LED_BUILTIN, LOW);
-  luminosityValue = analogRead(LDR);
+int readLuminosity() {
+  // digitalWrite(transistorPhotoResistancePin,LOW);
 
-Serial.println("");
-Serial.println("");
-Serial.println("");
-Serial.println("");
+  int luminosityValue = analogRead(LDR);
 
-  Serial.print("luminosityValue: ");
-  Serial.println(luminosityValue);
+  // digitalWrite(transistorPhotoResistancePin,LOW);
 
-
-
-  // Serial.print("digitalRead(limitSwitchOpen): ");
-  // Serial.println(digitalRead(limitSwitchOpen));
-
-  // Serial.print(" digitalRead(limitSwitchClose): ");
-  // Serial.println( digitalRead(limitSwitchClose));
-
-  //closeChickenDoor();
-  //openChickenDoor();
-
-  if (isLight(luminosityValue) || forceOpen) {
-    // Serial.println("open ?");
-    openChickenDoor();
-  } else if (isDark(luminosityValue) || forceClose) {
-    // Serial.println("close ?");
-    closeChickenDoor();
-  }
-
-  lowPowerSleep(8);
+  return luminosityValue;
 }
 
 void lowPowerSleep(long seconds)
@@ -119,15 +188,17 @@ void lowPowerSleep(long seconds)
   }
 }
 
-void forceOpenDoor() {
-  Serial.println("Force open");
-  forceOpen = 1;
-}
+// Not implemented
+// void forceOpenDoor() {
+//   Serial.println("Force open");
+//   forceOpen = 1;
+// }
 
-void forceCloseDoor() {
-  Serial.println("Force close");
-  forceClose = 1;
-}
+// Not implemented
+// void forceCloseDoor() {
+//   Serial.println("Force close");
+//   forceClose = 1;
+// }
 
 bool isDark(int photoSensorValue) {
   return photoSensorValue < (dark - hysterisis);
@@ -146,21 +217,21 @@ bool isClosedDoorButtonPushed() {
 }
 
 void stopChickenDoor() {
-  digitalWrite(transistorPin,LOW);
+  digitalWrite(activatePontHPin,LOW);
 
   digitalWrite(motorPin1, LOW);
   digitalWrite(motorPin2, LOW);
 }
 
 void moveChickenDoorToClose() {
-  digitalWrite(transistorPin,HIGH);
+  digitalWrite(activatePontHPin,HIGH);
 
   digitalWrite(motorPin1, LOW);
   digitalWrite(motorPin2, HIGH);
 }
 
 void moveChickenDoorToOpen() {
-  digitalWrite(transistorPin,HIGH);
+  digitalWrite(activatePontHPin,HIGH);
 
   digitalWrite(motorPin1, HIGH);
   digitalWrite(motorPin2, LOW);
@@ -182,7 +253,7 @@ void openChickenDoor() {
     long currentTime = millis();
 
     while (motorTurns) {
-
+      // Serial.println("motorTurns");
       currentTime = millis();
 
       // if time excedeed (5s ?) => motorTurns false
